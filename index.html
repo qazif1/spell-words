@@ -1,0 +1,219 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Type the Word Under the Picture</title>
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<style>
+  :root{ --green:#2e8b57; --blue:#4682b4; --amber:#ff8c42; --bg1:#f0f8ff; --bg2:#e6f9ff; }
+  body {
+    font-family: 'Comic Sans MS', cursive, sans-serif;
+    text-align: center;
+    background: linear-gradient(to bottom, var(--bg1), var(--bg2));
+    margin: 0; padding: 20px;
+  }
+  h1 { color: var(--green); margin: 8px 0 12px; }
+
+  /* Progress */
+  #topbar{ display:flex; justify-content:center; gap:10px; flex-wrap:wrap; margin-bottom:8px; }
+  .pill{
+    background:#fff; border:2px solid var(--blue); border-radius:999px;
+    padding:6px 14px; font-weight:bold; color:#2e4b6b; box-shadow:0 2px 6px rgba(0,0,0,.08);
+  }
+  #progress-wrap{ max-width:520px; margin:0 auto 14px; }
+  #progress{
+    height:14px; background:#dbeeff; border:2px solid var(--blue); border-radius:999px; overflow:hidden;
+  }
+  #progress-fill{ height:100%; width:0%; background:#3aa76d; transition:width .4s ease; }
+
+  #game-card {
+    max-width: 520px; margin: auto; background: #fff; border-radius: 12px;
+    padding: 20px; box-shadow: 0 4px 12px rgba(0,0,0,0.15);
+  }
+  img {
+    width: 320px; max-width: 100%; height: auto;
+    border: 4px solid var(--blue); border-radius: 12px; margin-bottom: 10px;
+  }
+  #input {
+    width: 80%; padding: 10px; font-size: 22px; border: 2px solid var(--blue);
+    border-radius: 8px; text-align: center;
+  }
+  button {
+    padding: 10px 20px; margin: 6px; font-size: 18px; border: none; border-radius: 8px;
+    cursor: pointer; color: white; box-shadow: 0 3px 8px rgba(0,0,0,.15);
+    transition: transform .15s ease;
+  }
+  button:hover{ transform: translateY(-1px) }
+  .btn-listen { background: var(--blue); }
+  .btn-check  { background: var(--amber); }
+  .btn-next   { background: var(--green); display: none; }
+
+  #feedback { font-size: 20px; margin-top: 10px; min-height: 24px; font-weight: bold; }
+  .correct { color: var(--green); }
+  .incorrect { color: #ff6b6b; }
+
+  .confetti {
+    position: fixed; width: 10px; height: 10px; border-radius: 50%; pointer-events: none;
+  }
+</style>
+</head>
+<body>
+
+<h1>Type the Word Under the Picture</h1>
+
+<div id="topbar">
+  <div class="pill">Round: <span id="round">1</span>/<span id="total">20</span></div>
+</div>
+<div id="progress-wrap">
+  <div id="progress"><div id="progress-fill"></div></div>
+</div>
+
+<div id="game-card">
+  <img id="pic" src="" alt="Picture"><br>
+  <button class="btn-listen" id="listen">🔊 Listen</button>
+  <div>
+    <input id="input" type="text" placeholder="Type here..." autocomplete="off" spellcheck="false">
+  </div>
+  <div>
+    <button class="btn-check" id="check">✔ Check</button>
+    <button class="btn-next" id="next">Next ➔</button>
+  </div>
+  <div id="feedback"></div>
+</div>
+
+<script>
+// Word list (filenames must exist in same folder as lowercased PNGs)
+const WORDS = [
+  "Bus","Man","Woman","Dog","Home","House","Teacher","Class",
+  "Pencil","Pen","Bird","Book","Student","Food","Water",
+  "Cat","Fish","Drive","Suburb","Cafe"
+];
+
+// Shuffle helper
+function shuffle(arr){
+  const a = arr.slice();
+  for (let i = a.length - 1; i > 0; i--){
+    const j = Math.floor(Math.random() * (i + 1));
+    [a[i], a[j]] = [a[j], a[i]];
+  }
+  return a;
+}
+const rounds = shuffle(WORDS);
+
+let idx = 0;
+
+// Elements
+const pic = document.getElementById('pic');
+const input = document.getElementById('input');
+const feedback = document.getElementById('feedback');
+const checkBtn = document.getElementById('check');
+const nextBtn = document.getElementById('next');
+const listenBtn = document.getElementById('listen');
+const roundEl = document.getElementById('round');
+const totalEl = document.getElementById('total');
+const progressFill = document.getElementById('progress-fill');
+
+// Set total
+totalEl.textContent = rounds.length;
+
+// Confetti
+function confetti(){
+  const colors = ['#f00','#0f0','#00f','#ff0','#f0f','#0ff'];
+  for(let i=0;i<40;i++){
+    const c = document.createElement('div');
+    c.className = 'confetti';
+    c.style.left = Math.random() * window.innerWidth + 'px';
+    c.style.top = '-10px';
+    c.style.backgroundColor = colors[Math.floor(Math.random() * colors.length)];
+    c.style.width = c.style.height = Math.random() * 8 + 4 + 'px';
+    document.body.appendChild(c);
+    c.animate(
+      [
+        { transform: 'translateY(0) rotate(0deg)' },
+        { transform: `translateY(${window.innerHeight}px) rotate(${Math.random()*720}deg)` }
+      ],
+      { duration: Math.random() * 2000 + 1500, easing: 'ease-out' }
+    ).onfinish = () => c.remove();
+  }
+}
+
+// Speak function
+function speakOnce(text){
+  const utter = new SpeechSynthesisUtterance(text);
+  utter.volume = 1; utter.rate = 0.9; utter.pitch = 1;
+  window.speechSynthesis.cancel(); // avoid stacking
+  window.speechSynthesis.speak(utter);
+}
+
+// HUD / progress
+function updateProgress(){
+  roundEl.textContent = idx + 1;
+  const pct = ((idx + 1) / rounds.length) * 100;
+  progressFill.style.width = pct + '%';
+}
+
+// Load image
+function loadRound(){
+  input.value = '';
+  feedback.textContent = '';
+  feedback.className = '';
+  nextBtn.style.display = 'none';
+
+  const word = rounds[idx];
+  pic.src = word.toLowerCase() + '.png';
+  pic.alt = word;
+
+  updateProgress();
+  input.focus();
+
+  // Say the word immediately
+  setTimeout(() => speakOnce(word), 500);
+}
+
+// Check answer
+function check(){
+  const target = rounds[idx];
+  const guess = input.value.trim();
+  if (!guess){
+    feedback.textContent = "Please type your answer.";
+    feedback.className = 'incorrect';
+    return;
+  }
+  if (guess === target){ // exact match, capital first required
+    feedback.textContent = "Excellent!";
+    feedback.className = 'correct';
+    confetti();
+    speakOnce("Excellent!");
+    setTimeout(() => speakOnce(target), 800); // say word after Excellent
+    nextBtn.style.display = 'inline-block';
+  } else {
+    feedback.textContent = "Wrong answer, try again.";
+    feedback.className = 'incorrect';
+    speakOnce("Wrong answer, try again.");
+  }
+}
+
+// Next
+function next(){
+  if (idx < rounds.length - 1){
+    idx++;
+    loadRound();
+  } else {
+    feedback.textContent = "Game Over! Well done!";
+    speakOnce("Game Over! Well done!");
+    nextBtn.style.display = 'none';
+    updateProgress(); // fill to 100%
+  }
+}
+
+// Events
+checkBtn.addEventListener('click', check);
+nextBtn.addEventListener('click', next);
+listenBtn.addEventListener('click', () => speakOnce(rounds[idx]));
+input.addEventListener('keydown', e => { if (e.key === 'Enter') check(); });
+
+// Init
+loadRound();
+</script>
+</body>
+</html>
